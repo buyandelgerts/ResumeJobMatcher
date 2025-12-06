@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Java Resume Matcher</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-10">
+<div class="max-w-4xl mx-auto bg-white rounded-xl shadow-lg p-8">
+    <h1 class="text-3xl font-bold text-center mb-2">Resume ↔ Job Matcher</h1>
+    <p class="text-center text-gray-600 mb-8">Java + Spring Boot + Ollama (gemma3:1b)</p>
+
+    <form hx-post="/analyze" hx-target="#result" hx-swap="innerHTML" hx-on::after-request="renderResult(event)" hx-indicator="#loader">
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div>
+                <label class="block font-medium mb-2">Your Resume (PDF or Text)</label>
+                <input type="file" name="resumeFile" accept=".pdf" class="mb-3 w-full p-2 border rounded">
+                <textarea name="resumeText" rows="15" class="w-full p-3 border rounded-lg" placeholder="Or paste resume here"></textarea>
+            </div>
+            <div>
+                <label class="block font-medium mb-2">Job Description</label>
+                <textarea name="jobDescription" rows="15" class="w-full p-3 border rounded-lg" required></textarea>
+            </div>
+        </div>
+        <button type="submit" class="mt-6 w-full bg-blue-600 text-white py-4 rounded-lg text-xl font-semibold hover:bg-blue-700">
+            Analyze Match (Local LLM)
+        </button>
+    </form>
+
+    <!-- Loader Spinner -->
+    <div id="loader" class="htmx-indicator mt-10 text-center">
+        <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-blue-500 border-r-transparent border-t-transparent" role="status">
+            <span class="sr-only">Loading...</span>
+        </div>
+        <p class="mt-2 text-gray-600">Analyzing with local LLM... Please wait.</p>
+    </div>
+
+    <div id="result" class="mt-10"></div>
+</div>
+
+<script>
+    function renderResult(event) {
+        const response = event.detail.xhr.responseText;
+        try {
+            const data = JSON.parse(response);
+            let html = `
+                <div class="bg-blue-50 p-6 rounded-lg shadow-md">
+                    <h2 class="text-2xl font-bold mb-4 text-center">Match Analysis</h2>
+
+                    <!-- Percentage -->
+                    <div class="text-center mb-6">
+                        <span class="text-5xl font-bold ${data.percentage >= 70 ? 'text-green-600' : data.percentage >= 50 ? 'text-yellow-600' : 'text-red-600'}">
+                            ${data.percentage || 0}%
+                        </span>
+                        <p class="text-gray-600">Overall Match Score</p>
+                    </div>
+
+                    <!-- Keywords -->
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Key Skills from Job Description</h3>
+                        <ul class="list-disc pl-6 grid grid-cols-2 gap-2">
+                            ${data.keywords ? data.keywords.map(kw => `<li class="text-gray-700">${kw}</li>`).join('') : '<li>No keywords found</li>'}
+                        </ul>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-6 mb-6">
+                        <!-- Found -->
+                        <div class="bg-green-100 p-4 rounded">
+                            <h3 class="text-lg font-semibold mb-2 text-green-800">Found in Your Resume</h3>
+                            <p class="text-green-700">
+                                ${typeof data.found === 'number' ? data.found + ' keywords' : (data.found ? data.found.map(f => f).join(', ') : 'None')}
+                            </p>
+                        </div>
+
+                        <!-- Missing -->
+                        <div class="bg-red-100 p-4 rounded">
+                            <h3 class="text-lg font-semibold mb-2 text-red-800">Missing from Your Resume</h3>
+                            <p class="text-red-700">
+                                ${typeof data.missing === 'number' ? data.missing + ' keywords' : (data.missing ? data.missing.map(m => m).join(', ') : 'None')}
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Rewritten Bullet -->
+                    <div class="mb-6">
+                        <h3 class="text-lg font-semibold mb-2">Suggested Rewritten Bullet</h3>
+                        <blockquote class="border-l-4 border-blue-500 pl-4 italic text-gray-700">
+                            ${data.rewritten_bullet || 'No suggestion available'}
+                        </blockquote>
+                    </div>
+
+                    <!-- Summary -->
+                    <div>
+                        <h3 class="text-lg font-semibold mb-2">Fit Summary</h3>
+                        <p class="text-gray-700">${data.summary || 'No summary available'}</p>
+                    </div>
+                </div>
+            `;
+            if (data.error) {
+                html += `<p class="text-red-600 mt-4">${data.error}</p>`;
+            }
+            // Add raw JSON expander for debugging
+            html += `
+                <details class="mt-4">
+                    <summary class="text-sm text-gray-500 cursor-pointer">View Raw JSON (for debugging)</summary>
+                    <pre class="bg-gray-100 p-4 rounded mt-2 overflow-auto">${response}</pre>
+                </details>
+            `;
+            document.getElementById('result').innerHTML = html;
+        } catch (e) {
+            document.getElementById('result').innerHTML = `
+                <div class="bg-red-100 p-4 rounded">
+                    <p class="text-red-600">Error rendering results: ${e.message}</p>
+                    <pre class="mt-2">${response}</pre>
+                </div>
+            `;
+        }
+    }
+</script>
+</body>
+</html>
